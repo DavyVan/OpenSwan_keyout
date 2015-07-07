@@ -1,2 +1,138 @@
 # OpenSwan_keyout
-OpenSwan with key output feature
+OpenSwan with key output feature.
+
+This document aims to guide you to install and configure Openswan.
+About how it works please see AboutOpenswan.txt.
+
+######################################################################
+# STEP 0 - PREPARE TO INSTALL
+######################################################################
+
+There are a few packages required for Openswan to compile from source,
+some of them are built in Ubuntu by default. However, we still need to 
+install at least 3 packages manually:
+
+	gawk/mawk, flex, bison
+
+I'm very sorry that I forgot the exact name of these packages when use
+'apt-get install'. Fortunately, package manager can give us some 
+suggestion on the correct packages' name.
+
+######################################################################
+# STEP 1 - COMPILE & INSTALL
+######################################################################
+
+We should compile with NETKEY (Native linux IPsec stack), so from the 
+openswan directory:
+
+	make programs
+	sudo make install
+
+######################################################################
+# STEP 2 - CONFIGURE ipsec.secrets
+######################################################################
+
+This file is at /etc/ipsec.secrets, and it looks like this:
+
+----------------------------------------------------------------------
+# /etc/ipsec.secrets - secrets for IKE/IPsec authentication
+
+# Manual: ipsec.secrets(5)
+
+# This file holds shared secrets or RSA private keys for inter-Pluto
+# authentication.  See ipsec_pluto(8) manpage, and HTML documentation.
+
+# RSA private key for this host, authenticating it to any other host
+# which knows the public part.  Suitable public keys, for ipsec.conf, DNS,
+# or configuration of other implementations, can be extracted conveniently
+# with "ipsec showhostkey".
+#
+fec0::1:2	%any: PSK "1A2B3C4D5E"
+172.16.77.129	%any: PSK "AAAAAAAAAA"
+fe80::20c:29ff:fea2:48ee	%any:	PSK "BBBBBBBBBB"
+----------------------------------------------------------------------
+
+You can add the pre-shared key in this file. The format is:
+
+	{local host name} {remote host name}: PSK "{pre-shared key}"
+
+%any means "any host name".
+
+######################################################################
+# STEP 3 - CONFIGURE ipsec.conf
+######################################################################
+
+This file is at /etc/ipsec.conf, and it looks like this:
+
+----------------------------------------------------------------------
+config setup
+        #klipsdebug=none
+        #plutodebug=all          
+        #interfaces="ipsec0=eth1"
+		oe=off
+		strictcrlpolicy=no
+        protostack=netkey
+        nat_traversal=yes
+conn test6
+        #connaddrfamily=ipv6
+        type=transport
+        #ikev2=insist
+        authby=secret
+        #auth=esp
+        left=fec0::1:2		#local ip
+        right=fec0::1:1		#remote ip
+		#rightprotoport=17/1701
+        #esp=3des-sha1
+        #ike=3des-sha1
+        #keyexchange=ike
+        pfs=no
+        auto=add
+conn test4
+        #connaddrfamily=ipv6
+        type=transport
+        #ikev2=insist
+        authby=secret
+        #auth=esp
+        left=172.16.77.129		#local ip
+        right=172.16.77.128		#remote ip
+        #rightprotoport=17/1701
+        #esp=3des-sha1
+        #ike=3des-sha1
+        #keyexchange=ike
+        pfs=no
+        auto=add
+----------------------------------------------------------------------
+
+# WARNING: Use Tab in this file! (Except the 'conn'/'config' line)
+
+i.		"config setup" and its options is necessary.
+ii.		Every "conn xxxx" line means a connection, with options specified below.
+iii.	You can define connections as much as you need.
+iv.		"#" means comment.
+
+######################################################################
+# STEP 4 - RESTART IPsec SERVICE & VERIFY
+######################################################################
+
+	/etc/init.d/ipsec restart
+	ipsec verify
+
+It will return a check list for you, please make sure NO Failed appears,
+except one case:
+
+	Two or more interfaces found, checking IP forwarding	[FAILED]
+
+######################################################################
+# STEP 5 - DO AGAIN ON ANOTHER PEER
+######################################################################
+
+Configuration between two peer is exactly the same, except the IP 
+addresses. So do steps above again to configure another peer.
+
+######################################################################
+# STEP 6 - START A CONNECTION
+######################################################################
+
+	ipsec auto --up test6
+
+"test6" is the connection which is defined in file /etc/ipsec.conf.
